@@ -70,14 +70,17 @@ function extractFromHTML(html) {
   doc.querySelectorAll("a").forEach(a => {
     let href = a.getAttribute("href") || "";
 
-    let match = href.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)\/?(?:\?.*)?$/);
+    // _u/ 경로 포함 형태: instagram.com/_u/username
+    let match = href.match(/instagram\.com\/_u\/([a-zA-Z0-9_.]+)/);
+    if (!match) {
+      // 일반 형태: instagram.com/username
+      match = href.match(/instagram\.com\/([a-zA-Z0-9_.]+)\/?(?:\?.*)?$/);
+    }
 
     if (match) {
       const username = match[1].toLowerCase();
-      const excluded = ["explore", "reels", "stories", "accounts", "p", "tv", "reel", "direct", "accounts.instagram.com"];
-      if (!excluded.includes(username)) {
-        usernames.push(username);
-      }
+      const excluded = ["explore", "reels", "stories", "accounts", "p", "tv", "reel", "direct", "_u"];
+      if (!excluded.includes(username)) usernames.push(username);
     }
   });
 
