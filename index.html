@@ -1,30 +1,96 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>인스타 맞팔 분석기</title>
-  <style>
-    body { font-family: Arial; padding: 20px; }
-    ul { border: 1px solid #ccc; padding: 10px; min-height: 100px; }
-  </style>
+<meta charset="UTF-8">
+<title>인스타 맞팔 분석기</title>
+
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f5f6f7;
+    margin: 0;
+    padding: 20px;
+  }
+
+  h1 {
+    text-align: center;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: auto;
+  }
+
+  .card {
+    background: white;
+    padding: 15px;
+    border-radius: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  }
+
+  input {
+    margin: 5px 0;
+  }
+
+  button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: black;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+  }
+
+  ul {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-left: 20px;
+  }
+
+  .count {
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+</style>
 </head>
+
 <body>
 
-<h2>인스타 맞팔 분석기</h2>
+<div class="container">
 
-<p>팔로잉 JSON (following.json)</p>
-<input type="file" id="followingFile"><br><br>
+<h1>📊 인스타 맞팔 분석기</h1>
 
-<p>팔로워 JSON (followers_1.json)</p>
-<input type="file" id="followersFile"><br><br>
+<div class="card">
+  <p>📁 팔로잉 (following.json)</p>
+  <input type="file" id="followingFile">
 
-<button onclick="analyze()">분석</button>
+  <p>📁 팔로워 (followers 여러 개 가능)</p>
+  <input type="file" id="followersFile" multiple>
 
-<h3>❌ 내가 팔로우만 하는 사람</h3>
-<ul id="notFollowingBack"></ul>
+  <button onclick="analyze()">분석하기</button>
+</div>
 
-<h3>❌ 나만 팔로우 하는 사람</h3>
-<ul id="notFollowerBack"></ul>
+<div class="card">
+  <div class="count">👥 팔로잉 수: <span id="followingCount">0</span></div>
+  <div class="count">👥 팔로워 수: <span id="followersCount">0</span></div>
+</div>
+
+<div class="card">
+  <h3>❌ 내가 팔로우만 하는 사람</h3>
+  <div class="count">총 <span id="notFollowingCount">0</span>명</div>
+  <ul id="notFollowingBack"></ul>
+</div>
+
+<div class="card">
+  <h3>❌ 나만 팔로우 하는 사람</h3>
+  <div class="count">총 <span id="notFollowerCount">0</span>명</div>
+  <ul id="notFollowerBack"></ul>
+</div>
+
+</div>
 
 <script>
 async function readJSON(file) {
@@ -33,16 +99,19 @@ async function readJSON(file) {
     reader.onload = () => {
       try {
         resolve(JSON.parse(reader.result));
-      } catch (e) {
-        alert("JSON 파일이 이상함");
-        reject(e);
+      } catch {
+        alert("JSON 오류");
+        reject();
       }
     };
     reader.readAsText(file);
   });
 }
 
-// 👈 핵심: 구조 안전하게 처리
+function clean(username) {
+  return username.trim().toLowerCase();
+}
+
 function extractUsernames(data) {
   let usernames = [];
 
@@ -63,28 +132,42 @@ function extractUsernames(data) {
 
 async function analyze() {
   const followingFile = document.getElementById('followingFile').files[0];
-  const followersFile = document.getElementById('followersFile').files[0];
+  const followerFiles = document.getElementById('followersFile').files;
 
-  if (!followingFile || !followersFile) {
-    alert("파일 두 개 다 넣어라");
+  if (!followingFile || followerFiles.length === 0) {
+    alert("파일 다 넣어라");
     return;
   }
 
+  // 팔로잉
   const followingData = await readJSON(followingFile);
-  const followersData = await readJSON(followersFile);
-
-  // 👇 구조 차이 대응
-  const following = extractUsernames(
+  let following = extractUsernames(
     followingData.relationships_following || []
-  );
+  ).map(clean);
 
-  const followers = extractUsernames(
-    followersData || []
-  );
+  // 팔로워 (여러 파일)
+  let followers = [];
+
+  for (let file of followerFiles) {
+    const data = await readJSON(file);
+    followers = followers.concat(extractUsernames(data));
+  }
+
+  followers = followers.map(clean);
+
+  // 중복 제거
+  following = [...new Set(following)];
+  followers = [...new Set(followers)];
 
   // 비교
-  const notFollowingBack = following.filter(user => !followers.includes(user));
-  const notFollowerBack = followers.filter(user => !following.includes(user));
+  const notFollowingBack = following.filter(u => !followers.includes(u));
+  const notFollowerBack = followers.filter(u => !following.includes(u));
+
+  // 카운트 표시
+  document.getElementById("followingCount").innerText = following.length;
+  document.getElementById("followersCount").innerText = followers.length;
+  document.getElementById("notFollowingCount").innerText = notFollowingBack.length;
+  document.getElementById("notFollowerCount").innerText = notFollowerBack.length;
 
   // 출력
   const list1 = document.getElementById("notFollowingBack");
@@ -100,9 +183,6 @@ async function analyze() {
   notFollowerBack.forEach(user => {
     list2.innerHTML += `<li>${user}</li>`;
   });
-
-  console.log("following:", following);
-  console.log("followers:", followers);
 }
 </script>
 
