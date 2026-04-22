@@ -29,10 +29,6 @@
     box-shadow: 0 5px 15px rgba(0,0,0,0.1);
   }
 
-  input {
-    margin: 5px 0;
-  }
-
   button {
     width: 100%;
     padding: 12px;
@@ -108,24 +104,34 @@ async function readJSON(file) {
   });
 }
 
+// 문자열 정리 (중요)
 function clean(username) {
-  return username.trim().toLowerCase();
+  return (username || "").trim().toLowerCase();
 }
 
+// 🔥 모든 구조 대응
 function extractUsernames(data) {
   let usernames = [];
 
-  if (!Array.isArray(data)) return usernames;
+  if (!data) return usernames;
 
-  data.forEach(item => {
-    if (!item || !item.string_list_data) return;
-
-    item.string_list_data.forEach(user => {
-      if (user && user.value) {
-        usernames.push(user.value);
+  // 1. 배열 구조
+  if (Array.isArray(data)) {
+    data.forEach(item => {
+      if (item?.string_list_data) {
+        item.string_list_data.forEach(user => {
+          if (user?.value) usernames.push(user.value);
+        });
       }
     });
-  });
+  }
+
+  // 2. 객체 구조 (요즘)
+  else if (data?.string_list_data) {
+    data.string_list_data.forEach(user => {
+      if (user?.value) usernames.push(user.value);
+    });
+  }
 
   return usernames;
 }
@@ -139,13 +145,17 @@ async function analyze() {
     return;
   }
 
-  // 팔로잉
+  // 📌 팔로잉
   const followingData = await readJSON(followingFile);
-  let following = extractUsernames(
-    followingData.relationships_following || []
-  ).map(clean);
 
-  // 팔로워 (여러 파일)
+  let followingRaw =
+    followingData.relationships_following ??
+    followingData.relationships?.following ??
+    followingData;
+
+  let following = extractUsernames(followingRaw).map(clean);
+
+  // 📌 팔로워 (여러 파일)
   let followers = [];
 
   for (let file of followerFiles) {
@@ -163,7 +173,7 @@ async function analyze() {
   const notFollowingBack = following.filter(u => !followers.includes(u));
   const notFollowerBack = followers.filter(u => !following.includes(u));
 
-  // 카운트 표시
+  // 카운트
   document.getElementById("followingCount").innerText = following.length;
   document.getElementById("followersCount").innerText = followers.length;
   document.getElementById("notFollowingCount").innerText = notFollowingBack.length;
@@ -183,6 +193,9 @@ async function analyze() {
   notFollowerBack.forEach(user => {
     list2.innerHTML += `<li>${user}</li>`;
   });
+
+  console.log("following:", following);
+  console.log("followers:", followers);
 }
 </script>
 
