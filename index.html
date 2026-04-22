@@ -3,14 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <title>인스타 맞팔 분석기 (HTML)</title>
-
 <style>
   body {
     font-family: -apple-system, sans-serif;
     background: #f5f6f7;
     padding: 20px;
   }
-
   .card {
     background: white;
     padding: 15px;
@@ -18,7 +16,6 @@
     margin-bottom: 15px;
     box-shadow: 0 5px 15px rgba(0,0,0,0.1);
   }
-
   button {
     width: 100%;
     padding: 12px;
@@ -27,45 +24,35 @@
     border: none;
     border-radius: 10px;
   }
-
   ul {
     max-height: 200px;
     overflow-y: auto;
   }
 </style>
 </head>
-
 <body>
-
 <h1>📊 인스타 맞팔 분석기 (HTML)</h1>
-
 <div class="card">
   <p>📁 팔로잉 HTML</p>
   <input type="file" id="followingFile">
-
   <p>📁 팔로워 HTML</p>
   <input type="file" id="followersFile">
-
   <button onclick="analyze()">분석</button>
 </div>
-
 <div class="card">
   팔로잉: <span id="followingCount">0</span><br>
   팔로워: <span id="followersCount">0</span>
 </div>
-
 <div class="card">
   <h3>❌ 내가 팔로우만</h3>
   <div>총 <span id="notFollowingCount">0</span>명</div>
   <ul id="notFollowingBack"></ul>
 </div>
-
 <div class="card">
   <h3>❌ 나만 팔로우</h3>
   <div>총 <span id="notFollowerCount">0</span>명</div>
   <ul id="notFollowerBack"></ul>
 </div>
-
 <script>
 async function readFile(file) {
   return new Promise(resolve => {
@@ -78,16 +65,19 @@ async function readFile(file) {
 function extractFromHTML(html) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
-
   let usernames = [];
 
   doc.querySelectorAll("a").forEach(a => {
-    let href = a.getAttribute("href");
-    if (!href) return;
+    let href = a.getAttribute("href") || "";
 
-    let match = href.match(/instagram\.com\/([^\/]+)/);
+    let match = href.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)\/?(?:\?.*)?$/);
+
     if (match) {
-      usernames.push(match[1].toLowerCase());
+      const username = match[1].toLowerCase();
+      const excluded = ["explore", "reels", "stories", "accounts", "p", "tv", "reel", "direct", "accounts.instagram.com"];
+      if (!excluded.includes(username)) {
+        usernames.push(username);
+      }
     }
   });
 
@@ -97,36 +87,27 @@ function extractFromHTML(html) {
 async function analyze() {
   const followingFile = document.getElementById('followingFile').files[0];
   const followersFile = document.getElementById('followersFile').files[0];
-
   if (!followingFile || !followersFile) {
     alert("파일 넣어라");
     return;
   }
-
   const followingHTML = await readFile(followingFile);
   const followersHTML = await readFile(followersFile);
-
   const following = extractFromHTML(followingHTML);
   const followers = extractFromHTML(followersHTML);
-
   const notFollowingBack = following.filter(u => !followers.includes(u));
   const notFollowerBack = followers.filter(u => !following.includes(u));
-
   document.getElementById("followingCount").innerText = following.length;
   document.getElementById("followersCount").innerText = followers.length;
   document.getElementById("notFollowingCount").innerText = notFollowingBack.length;
   document.getElementById("notFollowerCount").innerText = notFollowerBack.length;
-
   const list1 = document.getElementById("notFollowingBack");
   const list2 = document.getElementById("notFollowerBack");
-
   list1.innerHTML = "";
   list2.innerHTML = "";
-
   notFollowingBack.forEach(u => list1.innerHTML += `<li>${u}</li>`);
   notFollowerBack.forEach(u => list2.innerHTML += `<li>${u}</li>`);
 }
 </script>
-
 </body>
 </html>
