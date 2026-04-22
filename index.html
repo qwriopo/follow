@@ -1,117 +1,72 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>인스타 맞팔 확인기 (JSON)</title>
-    <style>
-        body { font-family: sans-serif; line-height: 1.6; max-width: 600px; margin: 50px auto; padding: 20px; background-color: #fafafa; }
-        h1 { color: #262626; text-align: center; }
-        .card { background: white; border: 1px solid #dbdbdb; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        .input-group { margin-bottom: 15px; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; }
-        input[type="file"] { width: 100%; }
-        button { width: 100%; padding: 10px; background-color: #0095f6; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
-        button:hover { background-color: #1877f2; }
-        .result-section { display: none; }
-        .list-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
-        ul { list-style: none; padding: 0; border: 1px solid #eee; height: 300px; overflow-y: auto; background: #fff; }
-        li { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 14px; }
-        .count { font-size: 0.9em; color: #666; }
-        .warning { font-size: 0.8em; color: #ed4956; margin-top: 10px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>인스타 맞팔 분석기</title>
 </head>
 <body>
+  <h2>인스타 맞팔 분석기</h2>
 
-    <h1>IG Follower Checker</h1>
-    
-    <div class="card">
-        <p>인스타그램에서 다운로드한 <strong>JSON</strong> 파일을 선택하세요.</p>
-        
-        <div class="input-group">
-            <label>1. followers.json (나를 팔로우하는 사람)</label>
-            <input type="file" id="followersFile" accept=".json">
-        </div>
+  <input type="file" id="followingFile"> 팔로잉 JSON<br><br>
+  <input type="file" id="followersFile"> 팔로워 JSON<br><br>
 
-        <div class="input-group">
-            <label>2. following.json (내가 팔로잉하는 사람)</label>
-            <input type="file" id="followingFile" accept=".json">
-        </div>
+  <button onclick="analyze()">분석</button>
 
-        <button onclick="analyzeData()">결과 확인하기</button>
-        <p class="warning">* 데이터는 서버로 전송되지 않으며, 본인의 브라우저 내에서만 처리됩니다.</p>
-    </div>
+  <h3>❌ 내가 팔로우만 하는 사람</h3>
+  <ul id="notFollowingBack"></ul>
 
-    <div id="resultSection" class="result-section card">
-        <h2>분석 결과</h2>
-        <div class="list-container">
-            <div>
-                <p><strong>내가 맞팔 안한 사람</strong> <span id="nonBackCount" class="count"></span></p>
-                <ul id="nonBackList"></ul>
-            </div>
-            <div>
-                <p><strong>나를 맞팔 안한 사람</strong> <span id="nonFollowCount" class="count"></span></p>
-                <ul id="nonFollowList"></ul>
-            </div>
-        </div>
-    </div>
+  <h3>❌ 나만 팔로우 하는 사람</h3>
+  <ul id="notFollowerBack"></ul>
 
-    <script>
-        async function analyzeData() {
-            const followersFile = document.getElementById('followersFile').files[0];
-            const followingFile = document.getElementById('followingFile').files[0];
+<script>
+async function readJSON(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(JSON.parse(reader.result));
+    reader.readAsText(file);
+  });
+}
 
-            if (!followersFile || !followingFile) {
-                alert("두 파일을 모두 업로드해주세요!");
-                return;
-            }
+function extractUsernames(data) {
+  let usernames = [];
 
-            try {
-                // 파일 읽기
-                const followersText = await followersFile.text();
-                const followingText = await followingFile.text();
+  data.forEach(item => {
+    item.string_list_data.forEach(user => {
+      usernames.push(user.value);
+    });
+  });
 
-                const followersRaw = JSON.parse(followersText);
-                const followingRaw = JSON.parse(followingText);
+  return usernames;
+}
 
-                // JSON 구조에서 유저네임만 추출 (인스타그램 JSON 구조 대응)
-                // 1. 팔로워 추출 (배열 형태)
-                const followers = new Set(followersRaw.map(item => item.string_list_data[0].value));
+async function analyze() {
+  const followingFile = document.getElementById('followingFile').files[0];
+  const followersFile = document.getElementById('followersFile').files[0];
 
-                // 2. 팔로잉 추출 (relationships_following 키 안에 있음)
-                const following = new Set(followingRaw.relationships_following.map(item => item.string_list_data[0].value));
+  const followingData = await readJSON(followingFile);
+  const followersData = await readJSON(followersFile);
 
-                // 비교 로직
-                // 나를 맞팔 안한 사람 (내가 팔로우 중이나 상대는 아님)
-                const nonFollowers = [...following].filter(user => !followers.has(user));
-                
-                // 내가 맞팔 안한 사람 (상대는 나를 팔로우 중이나 나는 아님)
-                const nonBack = [...followers].filter(user => !following.has(user));
+  const following = extractUsernames(followingData.relationships_following);
+  const followers = extractUsernames(followersData);
 
-                // 결과 출력
-                displayResults('nonFollowList', 'nonFollowCount', nonFollowers);
-                displayResults('nonBackList', 'nonBackCount', nonBack);
+  const notFollowingBack = following.filter(user => !followers.includes(user));
+  const notFollowerBack = followers.filter(user => !following.includes(user));
 
-                document.getElementById('resultSection').style.display = 'block';
-            } catch (error) {
-                console.error(error);
-                alert("파일 형식이 잘못되었거나 분석 중 오류가 발생했습니다. 인스타그램 공식 JSON 파일인지 확인해주세요.");
-            }
-        }
+  const list1 = document.getElementById("notFollowingBack");
+  const list2 = document.getElementById("notFollowerBack");
 
-        function displayResults(listId, countId, data) {
-            const listEl = document.getElementById(listId);
-            const countEl = document.getElementById(countId);
-            
-            listEl.innerHTML = "";
-            countEl.innerText = `(${data.length}명)`;
+  list1.innerHTML = "";
+  list2.innerHTML = "";
 
-            data.forEach(username => {
-                const li = document.createElement('li');
-                li.innerText = username;
-                listEl.appendChild(li);
-            });
-        }
-    </script>
+  notFollowingBack.forEach(user => {
+    list1.innerHTML += `<li>${user}</li>`;
+  });
+
+  notFollowerBack.forEach(user => {
+    list2.innerHTML += `<li>${user}</li>`;
+  });
+}
+</script>
+
 </body>
 </html>
