@@ -3,36 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <title>인스타 맞팔 분석기</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    ul { border: 1px solid #ccc; padding: 10px; min-height: 100px; }
+  </style>
 </head>
 <body>
-  <h2>인스타 맞팔 분석기</h2>
 
-  <input type="file" id="followingFile"> 팔로잉 JSON<br><br>
-  <input type="file" id="followersFile"> 팔로워 JSON<br><br>
+<h2>인스타 맞팔 분석기</h2>
 
-  <button onclick="analyze()">분석</button>
+<p>팔로잉 JSON (following.json)</p>
+<input type="file" id="followingFile"><br><br>
 
-  <h3>❌ 내가 팔로우만 하는 사람</h3>
-  <ul id="notFollowingBack"></ul>
+<p>팔로워 JSON (followers_1.json)</p>
+<input type="file" id="followersFile"><br><br>
 
-  <h3>❌ 나만 팔로우 하는 사람</h3>
-  <ul id="notFollowerBack"></ul>
+<button onclick="analyze()">분석</button>
+
+<h3>❌ 내가 팔로우만 하는 사람</h3>
+<ul id="notFollowingBack"></ul>
+
+<h3>❌ 나만 팔로우 하는 사람</h3>
+<ul id="notFollowerBack"></ul>
 
 <script>
 async function readJSON(file) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(JSON.parse(reader.result));
+    reader.onload = () => {
+      try {
+        resolve(JSON.parse(reader.result));
+      } catch (e) {
+        alert("JSON 파일이 이상함");
+        reject(e);
+      }
+    };
     reader.readAsText(file);
   });
 }
 
+// 👈 핵심: 구조 안전하게 처리
 function extractUsernames(data) {
   let usernames = [];
 
+  if (!Array.isArray(data)) return usernames;
+
   data.forEach(item => {
+    if (!item || !item.string_list_data) return;
+
     item.string_list_data.forEach(user => {
-      usernames.push(user.value);
+      if (user && user.value) {
+        usernames.push(user.value);
+      }
     });
   });
 
@@ -43,15 +65,28 @@ async function analyze() {
   const followingFile = document.getElementById('followingFile').files[0];
   const followersFile = document.getElementById('followersFile').files[0];
 
+  if (!followingFile || !followersFile) {
+    alert("파일 두 개 다 넣어라");
+    return;
+  }
+
   const followingData = await readJSON(followingFile);
   const followersData = await readJSON(followersFile);
 
-  const following = extractUsernames(followingData.relationships_following);
-  const followers = extractUsernames(followersData);
+  // 👇 구조 차이 대응
+  const following = extractUsernames(
+    followingData.relationships_following || []
+  );
 
+  const followers = extractUsernames(
+    followersData || []
+  );
+
+  // 비교
   const notFollowingBack = following.filter(user => !followers.includes(user));
   const notFollowerBack = followers.filter(user => !following.includes(user));
 
+  // 출력
   const list1 = document.getElementById("notFollowingBack");
   const list2 = document.getElementById("notFollowerBack");
 
@@ -65,6 +100,9 @@ async function analyze() {
   notFollowerBack.forEach(user => {
     list2.innerHTML += `<li>${user}</li>`;
   });
+
+  console.log("following:", following);
+  console.log("followers:", followers);
 }
 </script>
 
