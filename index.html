@@ -23,10 +23,35 @@
     color: white;
     border: none;
     border-radius: 10px;
+    cursor: pointer;
   }
   ul {
     max-height: 200px;
     overflow-y: auto;
+    padding: 0;
+  }
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  li:last-child {
+    border-bottom: none;
+  }
+  .delete-btn {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 4px;
+    width: auto;
+    line-height: 1;
+  }
+  .delete-btn:hover {
+    color: #e00;
   }
 </style>
 </head>
@@ -44,16 +69,19 @@
   팔로워: <span id="followersCount">0</span>
 </div>
 <div class="card">
-  <h3>❌ 내가 팔로우만</h3>
+  <h3>❌ 내가 팔로우만 (맞팔 안 됨)</h3>
   <div>총 <span id="notFollowingCount">0</span>명</div>
   <ul id="notFollowingBack"></ul>
 </div>
 <div class="card">
-  <h3>❌ 나만 팔로우</h3>
+  <h3>❌ 나만 팔로우 (일방적 팔로워)</h3>
   <div>총 <span id="notFollowerCount">0</span>명</div>
   <ul id="notFollowerBack"></ul>
 </div>
 <script>
+let notFollowingList = [];
+let notFollowerList = [];
+
 async function readFile(file) {
   return new Promise(resolve => {
     const reader = new FileReader();
@@ -69,14 +97,10 @@ function extractFromHTML(html) {
 
   doc.querySelectorAll("a").forEach(a => {
     let href = a.getAttribute("href") || "";
-
-    // _u/ 경로 포함 형태: instagram.com/_u/username
     let match = href.match(/instagram\.com\/_u\/([a-zA-Z0-9_.]+)/);
     if (!match) {
-      // 일반 형태: instagram.com/username
       match = href.match(/instagram\.com\/([a-zA-Z0-9_.]+)\/?(?:\?.*)?$/);
     }
-
     if (match) {
       const username = match[1].toLowerCase();
       const excluded = ["explore", "reels", "stories", "accounts", "p", "tv", "reel", "direct", "_u"];
@@ -85,6 +109,32 @@ function extractFromHTML(html) {
   });
 
   return [...new Set(usernames)];
+}
+
+function renderList(listId, countId, arr, type) {
+  const ul = document.getElementById(listId);
+  document.getElementById(countId).innerText = arr.length;
+  ul.innerHTML = "";
+  arr.forEach(u => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${u}</span>`;
+    const btn = document.createElement("button");
+    btn.className = "delete-btn";
+    btn.textContent = "✕";
+    btn.onclick = () => removeUser(type, u);
+    li.appendChild(btn);
+    ul.appendChild(li);
+  });
+}
+
+function removeUser(type, username) {
+  if (type === "notFollowing") {
+    notFollowingList = notFollowingList.filter(u => u !== username);
+    renderList("notFollowingBack", "notFollowingCount", notFollowingList, "notFollowing");
+  } else {
+    notFollowerList = notFollowerList.filter(u => u !== username);
+    renderList("notFollowerBack", "notFollowerCount", notFollowerList, "notFollower");
+  }
 }
 
 async function analyze() {
@@ -98,18 +148,15 @@ async function analyze() {
   const followersHTML = await readFile(followersFile);
   const following = extractFromHTML(followingHTML);
   const followers = extractFromHTML(followersHTML);
-  const notFollowingBack = following.filter(u => !followers.includes(u));
-  const notFollowerBack = followers.filter(u => !following.includes(u));
+
+  notFollowingList = following.filter(u => !followers.includes(u));
+  notFollowerList = followers.filter(u => !following.includes(u));
+
   document.getElementById("followingCount").innerText = following.length;
   document.getElementById("followersCount").innerText = followers.length;
-  document.getElementById("notFollowingCount").innerText = notFollowingBack.length;
-  document.getElementById("notFollowerCount").innerText = notFollowerBack.length;
-  const list1 = document.getElementById("notFollowingBack");
-  const list2 = document.getElementById("notFollowerBack");
-  list1.innerHTML = "";
-  list2.innerHTML = "";
-  notFollowingBack.forEach(u => list1.innerHTML += `<li>${u}</li>`);
-  notFollowerBack.forEach(u => list2.innerHTML += `<li>${u}</li>`);
+
+  renderList("notFollowingBack", "notFollowingCount", notFollowingList, "notFollowing");
+  renderList("notFollowerBack", "notFollowerCount", notFollowerList, "notFollower");
 }
 </script>
 </body>
