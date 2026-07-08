@@ -1,163 +1,116 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<title>인스타 맞팔 분석기 (HTML)</title>
-<style>
-  body {
-    font-family: -apple-system, sans-serif;
-    background: #f5f6f7;
-    padding: 20px;
-  }
-  .card {
-    background: white;
-    padding: 15px;
-    border-radius: 15px;
-    margin-bottom: 15px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-  }
-  button {
-    width: 100%;
-    padding: 12px;
-    background: black;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-  }
-  ul {
-    max-height: 200px;
-    overflow-y: auto;
-    padding: 0;
-  }
-  li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 4px 0;
-    border-bottom: 1px solid #f0f0f0;
-  }
-  li:last-child {
-    border-bottom: none;
-  }
-  .delete-btn {
-    background: none;
-    border: none;
-    color: #999;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 0 4px;
-    width: auto;
-    line-height: 1;
-  }
-  .delete-btn:hover {
-    color: #e00;
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마우스 행동 연구</title>
+    <style>
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family: "Pretendard", "Noto Sans KR", sans-serif; background: linear-gradient(135deg, #0f172a, #1e293b); color:white; overflow:hidden; }
+        #startScreen, #finishScreen { position:fixed; inset:0; display:flex; justify-content:center; align-items:center; background:rgba(15,23,42,.95); z-index:1000; }
+        .card { width:min(700px,90vw); background:rgba(255,255,255,.08); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.15); border-radius:24px; padding:40px; text-align:center; }
+        button { border:none; border-radius:14px; padding:16px 32px; font-size:18px; cursor:pointer; background:#3b82f6; color:white; transition:.2s; }
+        button:hover { transform:translateY(-2px); }
+        #target { width:56px; height:56px; border-radius:50%; position:absolute; display:none; cursor:pointer; background:radial-gradient(circle at 30% 30%, #ff8a8a, #ef4444); box-shadow:0 0 25px rgba(239,68,68,.7); }
+        #finishScreen { display:none; }
+    </style>
 </head>
 <body>
-<h1>📊 인스타 맞팔 분석기 (HTML)</h1>
-<div class="card">
-  <p>📁 팔로잉 HTML</p>
-  <input type="file" id="followingFile">
-  <p>📁 팔로워 HTML</p>
-  <input type="file" id="followersFile">
-  <button onclick="analyze()">분석</button>
+<div id="startScreen">
+    <div class="card">
+        <h1>🖱️ 마우스 행동 연구</h1>
+        <p>화면에 나타나는 목표를 클릭해주세요.</p>
+        <button id="startBtn">실험 시작</button>
+    </div>
 </div>
-<div class="card">
-  팔로잉: <span id="followingCount">0</span><br>
-  팔로워: <span id="followersCount">0</span>
-</div>
-<div class="card">
-  <h3>❌ 내가 팔로우만 (맞팔 안 됨)</h3>
-  <div>총 <span id="notFollowingCount">0</span>명</div>
-  <ul id="notFollowingBack"></ul>
-</div>
-<div class="card">
-  <h3>❌ 나만 팔로우 (일방적 팔로워)</h3>
-  <div>총 <span id="notFollowerCount">0</span>명</div>
-  <ul id="notFollowerBack"></ul>
+<div id="target"></div>
+<div id="finishScreen">
+    <div class="card">
+        <h1>📤 제출 중...</h1>
+        <p id="finishText">데이터를 서버로 전송하고 있습니다.</p>
+    </div>
 </div>
 <script>
-let notFollowingList = [];
-let notFollowerList = [];
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwzzlRpzbxMC4XAd0zHoNueq-oRjx6raQ49PILvdhvlKgA8d2jHx8480CATMAyKsE08lw/exec";
+const TARGET_COUNT = 20;
+let clicks = 0, lastTargetTime = 0, totalDistance = 0;
+let reactionTimes = [], speedSamples = [], prevMouse = null;
+let mouseEvents = [];
+let clickEvents = [];
 
-async function readFile(file) {
-  return new Promise(resolve => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsText(file);
-  });
-}
+const userId = crypto.randomUUID(), sessionId = crypto.randomUUID();
 
-function extractFromHTML(html) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  let usernames = [];
-
-  doc.querySelectorAll("a").forEach(a => {
-    let href = a.getAttribute("href") || "";
-    let match = href.match(/instagram\.com\/_u\/([a-zA-Z0-9_.]+)/);
-    if (!match) {
-      match = href.match(/instagram\.com\/([a-zA-Z0-9_.]+)\/?(?:\?.*)?$/);
+document.addEventListener("mousemove", e => {
+    const now = performance.now();
+    if(prevMouse){
+        const dist = Math.sqrt((e.clientX - prevMouse.x)**2 + (e.clientY - prevMouse.y)**2);
+        const dt = now - prevMouse.t;
+        if(dt > 0) { totalDistance += dist; speedSamples.push(dist/dt); }
     }
-    if (match) {
-      const username = match[1].toLowerCase();
-      const excluded = ["explore", "reels", "stories", "accounts", "p", "tv", "reel", "direct", "_u"];
-      if (!excluded.includes(username)) usernames.push(username);
+    prevMouse = { x:e.clientX, y:e.clientY, t:now };
+
+    const last = mouseEvents[mouseEvents.length - 1];
+    if(!last || now - last.t >= 25) {
+        mouseEvents.push({ x: e.clientX, y: e.clientY, t: Math.round(now) });
     }
-  });
+});
 
-  return [...new Set(usernames)];
+function placeTarget(){
+    target.style.left = Math.random() * (window.innerWidth-56) + "px";
+    target.style.top = Math.random() * (window.innerHeight-56) + "px";
+    target.style.display = "block";
+    lastTargetTime = performance.now();
 }
 
-function renderList(listId, countId, arr, type) {
-  const ul = document.getElementById(listId);
-  document.getElementById(countId).innerText = arr.length;
-  ul.innerHTML = "";
-  arr.forEach(u => {
-    const li = document.createElement("li");
-    li.innerHTML = `<span>${u}</span>`;
-    const btn = document.createElement("button");
-    btn.className = "delete-btn";
-    btn.textContent = "✕";
-    btn.onclick = () => removeUser(type, u);
-    li.appendChild(btn);
-    ul.appendChild(li);
-  });
+target.addEventListener("click", e => {
+    const now = performance.now();
+    reactionTimes.push(now - lastTargetTime);
+    clickEvents.push({ x: e.clientX, y: e.clientY, t: Math.round(now) });
+    clicks++;
+    if(clicks >= TARGET_COUNT) finishTest();
+    else placeTarget();
+});
+
+async function finishTest(){
+    target.style.display = "none";
+    finishScreen.style.display = "flex";
+
+    const avgReactionTime = Math.round(reactionTimes.reduce((a,b)=>a+b,0)/reactionTimes.length);
+    const avgSpeed = Number((speedSamples.reduce((a,b)=>a+b,0)/speedSamples.length).toFixed(4));
+    const speedVariance = Number((speedSamples.reduce((a,b)=>a+(b-avgSpeed)**2,0)/speedSamples.length).toFixed(6));
+    const intervals = clickEvents.slice(1).map((c,i) => c.t - clickEvents[i].t);
+    const meanInterval = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+    const intervalVariance = Number((intervals.reduce((a,b)=>a+(b-meanInterval)**2,0)/intervals.length).toFixed(2));
+
+    try {
+        // ✅ GET → POST로 변경, body에 JSON으로 전송
+        await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                userId,
+                sessionId,
+                targetCount: TARGET_COUNT,
+                avgReactionTime,
+                avgSpeed,
+                totalDistance: Math.round(totalDistance),
+                speedVariance,
+                intervalVariance,
+                mouseEvents,   // 배열 그대로 (JSON.stringify 불필요)
+                clickEvents
+            })
+        });
+        finishText.innerHTML = "✅ 데이터 제출 완료<br><br>참여해주셔서 감사합니다.";
+    } catch(err) {
+        finishText.innerHTML = "❌ 전송 실패<br><br>F12 콘솔을 확인하세요.";
+    }
 }
 
-function removeUser(type, username) {
-  if (type === "notFollowing") {
-    notFollowingList = notFollowingList.filter(u => u !== username);
-    renderList("notFollowingBack", "notFollowingCount", notFollowingList, "notFollowing");
-  } else {
-    notFollowerList = notFollowerList.filter(u => u !== username);
-    renderList("notFollowerBack", "notFollowerCount", notFollowerList, "notFollower");
-  }
-}
-
-async function analyze() {
-  const followingFile = document.getElementById('followingFile').files[0];
-  const followersFile = document.getElementById('followersFile').files[0];
-  if (!followingFile || !followersFile) {
-    alert("파일 넣어라");
-    return;
-  }
-  const followingHTML = await readFile(followingFile);
-  const followersHTML = await readFile(followersFile);
-  const following = extractFromHTML(followingHTML);
-  const followers = extractFromHTML(followersHTML);
-
-  notFollowingList = following.filter(u => !followers.includes(u));
-  notFollowerList = followers.filter(u => !following.includes(u));
-
-  document.getElementById("followingCount").innerText = following.length;
-  document.getElementById("followersCount").innerText = followers.length;
-
-  renderList("notFollowingBack", "notFollowingCount", notFollowingList, "notFollowing");
-  renderList("notFollowerBack", "notFollowerCount", notFollowerList, "notFollower");
-}
+document.getElementById("startBtn").addEventListener("click", () => {
+    document.getElementById("startScreen").style.display = "none";
+    placeTarget();
+});
 </script>
 </body>
 </html>
